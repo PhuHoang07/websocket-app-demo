@@ -1,7 +1,9 @@
+require("dotenv").config();
 const http = require("http");
 const WebSocket = require("ws");
 const express = require("express");
 const app = express();
+const connectMongo = require("./db/mongoose");
 
 const server = http.createServer(app);
 
@@ -31,6 +33,10 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(3000, () => {
-  console.log("Server running on port 3000");
-});
+(async () => {
+  await connectMongo();
+
+  server.listen(3000, () => {
+    console.log("Server running on port 3000");
+  });
+})();

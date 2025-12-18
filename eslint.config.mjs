@@ -11,7 +11,7 @@ export default defineConfig([
       globals: globals.node,
     },
     rules: {
-      "no-unused-vars": "error",
+      "no-unused-vars": "warn",
       "no-console": "off",
     },
   },

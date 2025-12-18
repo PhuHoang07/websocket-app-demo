@@ -1,11 +1,36 @@
+const http = require("http");
+const WebSocket = require("ws");
 const express = require("express");
 const app = express();
-const port = 3000;
+
+const server = http.createServer(app);
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("Start server");
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+const wss = new WebSocket.Server({ server });
+
+wss.on("connection", (ws) => {
+  console.log("Client connected");
+
+  ws.on("error", console.error);
+
+  ws.on("message", (message) => {
+    console.log("Message:", message.toString());
+
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(message.toString());
+      }
+    });
+  });
+
+  ws.on("close", () => {
+    console.log("Client left");
+  });
+});
+
+server.listen(3000, () => {
+  console.log("Server running on port 3000");
 });

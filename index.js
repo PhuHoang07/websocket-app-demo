@@ -63,9 +63,14 @@ wss.on("connection", (ws) => {
 });
 
 (async () => {
-  await connectMongo();
+  try {
+    await connectMongo();
 
-  server.listen(3000, () => {
-    console.log("Server running on port 3000");
-  });
+    server.listen(3000, () => {
+      console.log("Server running on port 3000");
+    });
+  } catch (err) {
+    console.error("Server startup failed");
+    console.error(err);
+  }
 })();

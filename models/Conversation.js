@@ -15,7 +15,7 @@ const conversationSchema = new mongoose.Schema(
 
     chatParticipant: {
       type: String,
-      required: true,
+      default: null,
     },
   },
   {

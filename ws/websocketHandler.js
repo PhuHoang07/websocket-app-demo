@@ -14,7 +14,7 @@ module.exports = (wss) => {
             break;
 
           case WS_EVENTS.WS_IN.JOIN:
-            await handleJoinConversation(ws, data);
+            await handleJoinConversation(wss, ws, data);
             break;
 
           case WS_EVENTS.WS_IN.MESSAGE:
@@ -34,6 +34,16 @@ module.exports = (wss) => {
         );
       }
     });
+    ws.on("close", () => {
+      if (ws.username && ws.conversationId) {
+        broadcastSystem(
+          wss,
+          ws.conversationId,
+          `${ws.username} left the conversation`,
+          ws,
+        );
+      }
+    });
   });
 };
 
@@ -50,7 +60,7 @@ const handleCreateConversation = async (ws, data) => {
   );
 };
 
-const handleJoinConversation = async (ws, data) => {
+const handleJoinConversation = async (wss, ws, data) => {
   const result = await conversationController.joinConversation({
     conversationId: data.conversationId,
     username: data.username,
@@ -85,6 +95,13 @@ const handleJoinConversation = async (ws, data) => {
       type: WS_EVENTS.WS_OUT.HISTORY,
       data: history,
     }),
+  );
+
+  broadcastSystem(
+    wss,
+    data.conversationId,
+    `${data.username} joined the conversation`,
+    ws,
   );
 };
 
@@ -123,4 +140,22 @@ const handleViewHistory = async (ws, data) => {
       data: history,
     }),
   );
+};
+
+//This function broadcast to other one in conversation that a person have just joined in it
+const broadcastSystem = (wss, conversationId, message, exceptWs = null) => {
+  wss.clients.forEach((client) => {
+    if (
+      client.readyState === 1 &&
+      client.conversationId === conversationId &&
+      client !== exceptWs
+    ) {
+      client.send(
+        JSON.stringify({
+          type: WS_EVENTS.WS_OUT.SYSTEM,
+          message,
+        }),
+      );
+    }
+  });
 };

@@ -65,6 +65,20 @@
         let username = null;
         let mode = null; // "JOIN" | "VIEW"
 
+        function formatTime(dateString) {
+            const date = new Date(dateString);
+
+            return date.toLocaleString("vi-VN", {
+                timeZone: "Asia/Ho_Chi_Minh",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+            });
+        }
+
         function addSystemMessage(text) {
             const div = document.createElement("div");
             div.className = "system";
@@ -72,10 +86,13 @@
             messagesDiv.appendChild(div);
         }
 
-        function addChatMessage(sender, content) {
+        function addChatMessage(sender, content, createdAt) {
             const div = document.createElement("div");
             div.className = "msg";
-            div.textContent = `${sender}: ${content}`;
+
+            const time = createdAt ? formatTime(createdAt) : "";
+            div.textContent = `[${time}] ${sender}: ${content}`;
+
             messagesDiv.appendChild(div);
         }
 
@@ -114,7 +131,7 @@
                 case "HISTORY":
                     messagesDiv.innerHTML = "";
                     msg.data.forEach((m) => {
-                        addChatMessage(m.senderName, m.content);
+                        addChatMessage(m.senderName, m.content, m.createdAt);
                     });
                     if (mode === "VIEW") {
                         addSystemMessage("Viewing conversation (read-only)");
@@ -125,7 +142,12 @@
                     addChatMessage(
                         msg.data.senderName,
                         msg.data.content,
+                        msg.data.createdAt
                     );
+                    break;
+
+                case "SYSTEM":
+                    addSystemMessage(msg.message);
                     break;
             }
         };

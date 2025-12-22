@@ -12,6 +12,7 @@ const WS_OUT = {
   NEW_MESSAGE: "NEW_MESSAGE",
   HISTORY: "HISTORY",
   ERROR: "ERROR",
+  SYSTEM: "SYSTEM",
 };
 
 const CHAT_TYPE = {

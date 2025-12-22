@@ -1,41 +1,57 @@
 const Conversation = require("../models/Conversation");
+const CONSTANTS = require("../constants/index");
 
-exports.createConversation = async (username) => {
+exports.createConversation = async (payload) => {
+  const { chatType = CONSTANTS.CHAT_TYPE.PRIVATE, userId, username } = payload;
+  if (!payload) {
+    throw new Error("Payload is required");
+  }
+
+  // MVP: use username, future: use userId (uuid)
+  const actor = userId ?? username;
+
+  if (!actor) {
+    throw new Error("Actor is required to create conversation");
+  }
+
   return Conversation.create({
-    chatType: "private",
-    createdBy: username,
-    chatParticipant: null,
+    chatType,
+    createdBy: actor,
   });
 };
 
 exports.joinConversation = async (payload) => {
-  const { conversationId, username } = payload;
-  const actor = username;
-
   try {
-    const converstationDetails = await Conversation.findById(conversationId);
+    const { conversationId, username, userId } = payload;
+    // MVP: use username, future: use userId (uuid)
+    const actor = userId ?? username;
+    if (!payload) {
+      throw new Error("Payload is required");
+    }
 
-    if (!converstationDetails) {
+    const conversationDetails = await Conversation.findById(conversationId);
+
+    if (!conversationDetails) {
       throw new Error("Conversation not found");
     }
 
-    if (!converstationDetails.chatParticipant) {
-      converstationDetails.chatParticipant = actor;
-      await converstationDetails.save();
+    if (!conversationDetails.chatParticipant) {
+      conversationDetails.chatParticipant = actor;
+      await conversationDetails.save();
 
-      return { ok: true, conversation: converstationDetails };
+      return { ok: true, conversation: conversationDetails };
     }
 
     // *INFO: temporary check chatParticipant = actor  for testing case
     if (
-      converstationDetails.chatParticipant === actor ||
-      converstationDetails.createdBy === actor
+      conversationDetails.chatParticipant === actor ||
+      conversationDetails.createdBy === actor
     ) {
-      return { ok: true, conversation: converstationDetails };
+      return { ok: true, conversation: conversationDetails };
     }
 
     throw new Error("Conversation already belongs to another user");
   } catch (error) {
-    return { ok: false, reason: error.messegae };
+    return { ok: false, reason: error.message };
   }
 };

@@ -108,21 +108,40 @@ const handleJoinConversation = async (wss, ws, data) => {
 const handleMessage = async (ws, wss, data) => {
   if (!ws.conversationId) return;
 
+  await new Promise((res) => setTimeout(res, 2000));
+
   const saved = await messageController.saveMessage({
     conversationId: ws.conversationId,
     content: data.content,
     senderName: ws.username,
   });
 
+  ws.send(
+    JSON.stringify({
+      type: WS_EVENTS.WS_OUT.MESSAGE_SENT,
+      tempId: data.tempId,
+      data: {
+        senderName: saved.senderName,
+        content: saved.content,
+        createdAt: saved.createdAt,
+      },
+    }),
+  );
+
   wss.clients.forEach((client) => {
     if (
       client.readyState === 1 &&
-      client.conversationId === ws.conversationId
+      client.conversationId === ws.conversationId &&
+      client !== ws
     ) {
       client.send(
         JSON.stringify({
           type: WS_EVENTS.WS_OUT.NEW_MESSAGE,
-          data: saved,
+          data: {
+            senderName: saved.senderName,
+            content: saved.content,
+            createdAt: saved.createdAt,
+          },
         }),
       );
     }

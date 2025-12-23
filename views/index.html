@@ -60,6 +60,7 @@
         const ws = new WebSocket("ws://localhost:3000");
         const messagesDiv = document.getElementById("messages");
         const messageInput = document.getElementById("messageInput");
+        const pendingMessages = new Map();
 
         let currentConversationId = null;
         let username = null;
@@ -149,6 +150,17 @@
                 case "SYSTEM":
                     addSystemMessage(msg.message);
                     break;
+
+                case "MESSAGE_SENT": {
+                    const div = pendingMessages.get(msg.tempId);
+                    if (!div) return;
+
+                    const time = formatTime(msg.data.createdAt);
+                    div.textContent = `[sent ${time}] ${msg.data.senderName}: ${msg.data.content}`;
+
+                    pendingMessages.delete(msg.tempId);
+                    break;
+                }
             }
         };
 
@@ -213,15 +225,26 @@
             const content = messageInput.value;
             if (!content) return;
 
+            const tempId = crypto.randomUUID();
+
+            const div = document.createElement("div");
+            div.className = "msg";
+            div.dataset.tempId = tempId;
+            div.textContent = `[sending...] ${username}: ${content}`;
+            messagesDiv.appendChild(div);
+
+            pendingMessages.set(tempId, div);
             ws.send(
                 JSON.stringify({
                     type: "MESSAGE",
+                    tempId,
                     content,
                 }),
             );
 
             messageInput.value = "";
         }
+
 
         function resetState() {
             mode = null;

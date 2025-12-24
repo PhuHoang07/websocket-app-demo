@@ -161,7 +161,7 @@ const handleViewHistory = async (ws, data) => {
   );
 };
 
-//This function broadcast to other one in conversation that a person have just joined in it
+//*INFO: This function broadcast system message to others in conversation.
 const broadcastSystem = (wss, conversationId, message, exceptWs = null) => {
   wss.clients.forEach((client) => {
     if (

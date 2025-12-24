@@ -18,7 +18,20 @@
         }
 
         .msg {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 6px;
+        }
+
+        .msg-content {
+            white-space: pre-wrap;
+        }
+
+        .msg-status {
+            font-size: 12px;
+            color: gray;
+            margin-left: 10px;
         }
 
         .system {
@@ -61,6 +74,7 @@
         const messagesDiv = document.getElementById("messages");
         const messageInput = document.getElementById("messageInput");
         const pendingMessages = new Map();
+        const messages = [];
 
         let currentConversationId = null;
         let username = null;
@@ -76,7 +90,6 @@
                 second: "2-digit",
                 day: "2-digit",
                 month: "2-digit",
-                year: "2-digit",
             });
         }
 
@@ -123,6 +136,7 @@
                     messagesDiv.innerHTML = "";
                     addSystemMessage("Joined conversation");
                     setSendEnabled(true);
+                    autoScroll();
                     break;
 
                 case "JOIN_REFUSED":
@@ -130,35 +144,59 @@
                     break;
 
                 case "HISTORY":
-                    messagesDiv.innerHTML = "";
+                    messages.length = 0;
+
                     msg.data.forEach((m) => {
-                        addChatMessage(m.senderName, m.content, m.createdAt);
+                        messages.push({
+                            id: crypto.randomUUID(),
+                            senderName: m.senderName,
+                            content: m.content,
+                            createdAt: m.createdAt,
+                            status: "sent",
+                        });
                     });
+
+                    sortMessages();
+                    renderMessages();
+
                     if (mode === "VIEW") {
                         addSystemMessage("Viewing conversation (read-only)");
                     }
                     break;
 
                 case "NEW_MESSAGE":
-                    addChatMessage(
-                        msg.data.senderName,
-                        msg.data.content,
-                        msg.data.createdAt
-                    );
+                    messages.push({
+                        id: crypto.randomUUID(),
+                        senderName: msg.data.senderName,
+                        content: msg.data.content,
+                        createdAt: msg.data.createdAt,
+                        status: "sent",
+                    });
+
+                    sortMessages();
+                    renderMessages();
                     break;
 
                 case "SYSTEM":
                     addSystemMessage(msg.message);
+                    autoScroll();
                     break;
 
                 case "MESSAGE_SENT": {
-                    const div = pendingMessages.get(msg.tempId);
-                    if (!div) return;
+                    const idx = messages.findIndex(
+                        (m) => m.id === msg.tempId
+                    );
 
-                    const time = formatTime(msg.data.createdAt);
-                    div.textContent = `[sent ${time}] ${msg.data.senderName}: ${msg.data.content}`;
+                    if (idx === -1) return;
 
-                    pendingMessages.delete(msg.tempId);
+                    messages[idx] = {
+                        ...messages[idx],
+                        createdAt: msg.data.createdAt,
+                        status: "sent",
+                    };
+
+                    sortMessages();
+                    renderMessages();
                     break;
                 }
             }
@@ -177,7 +215,6 @@
                 }),
             );
         }
-
 
         function joinConversation() {
             username = document.getElementById("username").value;
@@ -198,7 +235,6 @@
                 }),
             );
         }
-
 
         function viewConversation() {
             const conversationId =
@@ -227,13 +263,16 @@
 
             const tempId = crypto.randomUUID();
 
-            const div = document.createElement("div");
-            div.className = "msg";
-            div.dataset.tempId = tempId;
-            div.textContent = `[sending...] ${username}: ${content}`;
-            messagesDiv.appendChild(div);
+            messages.push({
+                id: tempId,
+                senderName: username,
+                content,
+                createdAt: null,
+                status: "sending",
+            });
 
-            pendingMessages.set(tempId, div);
+            renderMessages();
+
             ws.send(
                 JSON.stringify({
                     type: "MESSAGE",
@@ -245,6 +284,51 @@
             messageInput.value = "";
         }
 
+        function sortMessages() {
+            messages.sort((a, b) => {
+                if (!a.createdAt) return 1;
+                if (!b.createdAt) return -1;
+
+                return new Date(a.createdAt) - new Date(b.createdAt);
+            });
+        }
+
+        function renderMessages() {
+            messagesDiv.innerHTML = "";
+
+            messages.forEach((m) => {
+                const div = document.createElement("div");
+                div.className = "msg";
+
+                const text = document.createElement("span");
+                let prefix = "";
+
+                if (m.createdAt) {
+                    prefix = `[${formatTime(m.createdAt)}] `;
+                }
+
+                text.textContent = `${prefix}${m.senderName}: ${m.content}`;
+
+                div.appendChild(text);
+
+                if (m.status === "sending") {
+                    const status = document.createElement("span");
+                    status.style.float = "right";
+                    status.style.fontSize = "12px";
+                    status.style.color = "gray";
+                    status.textContent = "sending...";
+                    div.appendChild(status);
+                }
+
+                messagesDiv.appendChild(div);
+            });
+
+            autoScroll();
+        }
+
+        function autoScroll() {
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
 
         function resetState() {
             mode = null;

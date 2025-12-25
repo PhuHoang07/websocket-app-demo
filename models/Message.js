@@ -24,6 +24,11 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
+    clientCreatedAt: {
+      type: Date,
+      required: true,
+    },
   },
   {
     timestamps: true,

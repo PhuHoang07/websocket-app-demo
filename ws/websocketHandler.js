@@ -108,12 +108,14 @@ const handleJoinConversation = async (wss, ws, data) => {
 const handleMessage = async (ws, wss, data) => {
   if (!ws.conversationId) return;
 
-  await new Promise((res) => setTimeout(res, 2000));
+  await new Promise((res) => setTimeout(res, 3000));
 
   const saved = await messageController.saveMessage({
     conversationId: ws.conversationId,
     content: data.content,
     senderName: ws.username,
+    clientMessageId: data.tempId,
+    clientCreatedAt: data.clientCreatedAt,
   });
 
   ws.send(
@@ -124,6 +126,7 @@ const handleMessage = async (ws, wss, data) => {
         senderName: saved.senderName,
         content: saved.content,
         createdAt: saved.createdAt,
+        clientCreatedAt: saved.clientCreatedAt,
       },
     }),
   );
@@ -138,9 +141,11 @@ const handleMessage = async (ws, wss, data) => {
         JSON.stringify({
           type: WS_EVENTS.WS_OUT.NEW_MESSAGE,
           data: {
+            clientMessageId: saved.clientMessageId,
             senderName: saved.senderName,
             content: saved.content,
             createdAt: saved.createdAt,
+            clientCreatedAt: saved.clientCreatedAt,
           },
         }),
       );

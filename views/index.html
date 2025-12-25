@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>WS Chat Test</title>
+    <title>WS Chat Demo</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -38,11 +38,39 @@
             color: gray;
             font-style: italic;
         }
+
+        #connectionStatus {
+            color: gray;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ccc;
+            border-top: 2px solid #555;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
 <body>
-    <h3>WebSocket Chat Test</h3>
+    <h3>WebSocket Chat Demo</h3>
+
+    <div id="connectionStatus" style="display:none;">
+        <span class="spinner"></span>
+        <span>Reconnecting...</span>
+    </div>
 
     <!-- USER -->
     <div>
@@ -70,7 +98,6 @@
     <div id="messages"></div>
 
     <script>
-        const ws = new WebSocket("ws://localhost:3000");
         const messagesDiv = document.getElementById("messages");
         const messageInput = document.getElementById("messageInput");
         const pendingMessages = new Map();
@@ -79,6 +106,32 @@
         let currentConversationId = null;
         let username = null;
         let mode = null; // "JOIN" | "VIEW"
+        let ws;
+        let lastJoinPayload = null;
+
+        connectWebSocket();
+
+        function connectWebSocket() {
+            const wsUrl =
+                (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                hideReconnecting();
+                addSystemMessage("Connected to " + wsUrl);
+
+                if (mode === "JOIN" && lastJoinPayload) {
+                    ws.send(JSON.stringify(lastJoinPayload));
+                }
+            };
+
+            ws.onmessage = handleMessage;
+            ws.onclose = () => {
+                showReconnecting();
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
 
         function formatTime(dateString) {
             const date = new Date(dateString);
@@ -114,12 +167,7 @@
             messageInput.disabled = !enabled;
         }
 
-        ws.onopen = () => {
-            addSystemMessage("Connected to server");
-            setSendEnabled(false);
-        };
-
-        ws.onmessage = (e) => {
+        function handleMessage(e) {
             const msg = JSON.parse(e.data);
 
             switch (msg.type) {
@@ -133,10 +181,8 @@
                 case "JOIN_SUCCESS":
                     mode = "JOIN";
                     currentConversationId = msg.conversationId;
-                    messagesDiv.innerHTML = "";
                     addSystemMessage("Joined conversation");
                     setSendEnabled(true);
-                    autoScroll();
                     break;
 
                 case "JOIN_REFUSED":
@@ -144,38 +190,48 @@
                     break;
 
                 case "HISTORY":
-                    messages.length = 0;
+                    const pending = getPendingMessages();
 
-                    msg.data.forEach((m) => {
-                        messages.push({
-                            id: crypto.randomUUID(),
-                            senderName: m.senderName,
-                            content: m.content,
-                            createdAt: m.createdAt,
-                            status: "sent",
-                        });
-                    });
+                    const historyMessages = msg.data.map((m) => ({
+                        id: m.clientMessageId,
+                        senderName: m.senderName,
+                        content: m.content,
+                        createdAt: m.createdAt,
+                        status: "sent",
+                    }));
+
+                    messages.length = 0;
+                    messages.push(...historyMessages, ...pending);
 
                     sortMessages();
                     renderMessages();
+                    retryPendingMessages();
 
                     if (mode === "VIEW") {
                         addSystemMessage("Viewing conversation (read-only)");
                     }
                     break;
 
-                case "NEW_MESSAGE":
-                    messages.push({
-                        id: crypto.randomUUID(),
-                        senderName: msg.data.senderName,
-                        content: msg.data.content,
-                        createdAt: msg.data.createdAt,
-                        status: "sent",
-                    });
+                case "NEW_MESSAGE": {
+                    const idx = messages.findIndex(
+                        m => m.id === msg.data.clientMessageId
+                    );
 
-                    sortMessages();
+                    if (idx !== -1) {
+                        messages[idx].status = "sent";
+                        messages[idx].createdAt = msg.data.createdAt;
+                    } else {
+                        messages.push({
+                            id: msg.data.clientMessageId,
+                            senderName: msg.data.senderName,
+                            content: msg.data.content,
+                            createdAt: msg.data.createdAt,
+                            status: "sent",
+                        });
+                    }
                     renderMessages();
                     break;
+                }
 
                 case "SYSTEM":
                     addSystemMessage(msg.message);
@@ -183,17 +239,11 @@
                     break;
 
                 case "MESSAGE_SENT": {
-                    const idx = messages.findIndex(
-                        (m) => m.id === msg.tempId
-                    );
-
+                    const idx = messages.findIndex(m => m.id === msg.tempId);
                     if (idx === -1) return;
 
-                    messages[idx] = {
-                        ...messages[idx],
-                        createdAt: msg.data.createdAt,
-                        status: "sent",
-                    };
+                    messages[idx].status = "sent";
+                    messages[idx].createdAt = msg.data.createdAt;
 
                     sortMessages();
                     renderMessages();
@@ -201,6 +251,26 @@
                 }
             }
         };
+
+        function retryPendingMessages() {
+            if (ws.readyState !== WebSocket.OPEN) return;
+
+            const pending = messages.filter(m => m.status === "sending" || m.status === "retrying");
+
+            pending.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
+
+            pending.forEach((m) => {
+                if (m.retryCount >= 2) {
+                    m.status = "failed";
+                    return;
+                }
+                m.status = "retrying";
+                m.retryCount++;
+                sendMessageToServer(m);
+            });
+
+            renderMessages();
+        }
 
         function createConversation() {
             username = document.getElementById("username").value;
@@ -227,13 +297,13 @@
             resetState();
             mode = "JOIN";
 
-            ws.send(
-                JSON.stringify({
-                    type: "JOIN",
-                    username,
-                    conversationId,
-                }),
-            );
+            lastJoinPayload = {
+                type: "JOIN",
+                username,
+                conversationId,
+            };
+
+            ws.send(JSON.stringify(lastJoinPayload));
         }
 
         function viewConversation() {
@@ -268,28 +338,37 @@
                 senderName: username,
                 content,
                 createdAt: null,
+                clientCreatedAt: Date.now(),
                 status: "sending",
+                retryCount: 0,
             });
 
             renderMessages();
-
-            ws.send(
-                JSON.stringify({
-                    type: "MESSAGE",
-                    tempId,
-                    content,
-                }),
-            );
+            sendMessageToServer(messages[messages.length - 1]);
 
             messageInput.value = "";
         }
 
+        function sendMessageToServer(message) {
+            if (ws.readyState !== WebSocket.OPEN) return false;
+
+            ws.send(
+                JSON.stringify({
+                    type: "MESSAGE",
+                    tempId: message.id,
+                    content: message.content,
+                    clientCreatedAt: message.clientCreatedAt,
+                })
+            );
+
+            return true;
+        }
+
         function sortMessages() {
             messages.sort((a, b) => {
-                if (!a.createdAt) return 1;
-                if (!b.createdAt) return -1;
-
-                return new Date(a.createdAt) - new Date(b.createdAt);
+                const timeA = a.clientCreatedAt || a.createdAt || 0;
+                const timeB = b.clientCreatedAt || b.createdAt || 0;
+                return timeA - timeB;
             });
         }
 
@@ -311,12 +390,16 @@
 
                 div.appendChild(text);
 
-                if (m.status === "sending") {
+                if (m.status !== "sent") {
                     const status = document.createElement("span");
-                    status.style.float = "right";
-                    status.style.fontSize = "12px";
-                    status.style.color = "gray";
-                    status.textContent = "sending...";
+                    status.className = "msg-status";
+
+                    if (m.status === "sending") status.textContent = "sending...";
+                    if (m.status === "retrying")
+                        status.textContent = `retrying (${m.retryCount})`;
+                    if (m.status === "failed")
+                        status.textContent = "failed";
+
                     div.appendChild(status);
                 }
 
@@ -324,6 +407,13 @@
             });
 
             autoScroll();
+        }
+
+        function getPendingMessages() {
+            return messages.filter(
+                m => m.status === "sending" ||
+                    m.status === "retrying"
+            );
         }
 
         function autoScroll() {
@@ -337,6 +427,19 @@
             setSendEnabled(false);
         }
 
+        const connectionStatusDiv = document.getElementById("connectionStatus");
+        let isReconnecting = false;
+
+        function showReconnecting() {
+            if (isReconnecting) return;
+            isReconnecting = true;
+            connectionStatusDiv.style.display = "flex";
+        }
+
+        function hideReconnecting() {
+            isReconnecting = false;
+            connectionStatusDiv.style.display = "none";
+        }
     </script>
 </body>
 

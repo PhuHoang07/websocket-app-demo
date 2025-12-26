@@ -1,4 +1,5 @@
 const Message = require("../models/Message");
+const CONSTANTS = require("../constants/index");
 
 exports.getHistory = async (payload) => {
   if (!payload) {
@@ -67,7 +68,7 @@ exports.saveMessage = async (payload) => {
       clientCreatedAt,
     });
   } catch (err) {
-    if (err.code === 11000) {
+    if (err.code === CONSTANTS.ERROR_TYPE.DUPLICATE_KEY) {
       return await Message.findOne({ conversationId, clientMessageId });
     }
     console.error("saveMessage error:", err);

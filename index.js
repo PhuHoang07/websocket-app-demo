@@ -8,6 +8,7 @@ const wsHandler = require("./ws/websocketHandler");
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const { connectRedis } = require("./redis/redis");
 
 const PORT = process.env.PORT;
 
@@ -15,6 +16,7 @@ app.use("/views", express.static("views"));
 
 (async () => {
   await connectMongo();
+  await connectRedis();
   wsHandler(wss);
 
   server.listen(PORT, () => {

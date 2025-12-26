@@ -1,8 +1,45 @@
 const conversationController = require("../controllers/conversationController");
 const messageController = require("../controllers/messageController");
 const WS_EVENTS = require("../constants/index");
+const { pub, sub } = require("../redis/redis");
 
 module.exports = (wss) => {
+  sub.subscribe("chat-message", (raw) => {
+    const message = JSON.parse(raw);
+
+    wss.clients.forEach((client) => {
+      if (
+        client.readyState === 1 &&
+        client.conversationId === message.conversationId
+      ) {
+        client.send(
+          JSON.stringify({
+            type: WS_EVENTS.WS_OUT.NEW_MESSAGE,
+            data: message,
+          }),
+        );
+      }
+    });
+  });
+
+  sub.subscribe("system-message", (raw) => {
+    const data = JSON.parse(raw);
+    wss.clients.forEach((client) => {
+      if (
+        client.readyState === 1 &&
+        client.conversationId === data.conversationId &&
+        client.username !== data.exceptUsername
+      ) {
+        client.send(
+          JSON.stringify({
+            type: WS_EVENTS.WS_OUT.SYSTEM,
+            message: data.message,
+          }),
+        );
+      }
+    });
+  });
+
   wss.on("connection", (ws) => {
     ws.on("message", async (raw) => {
       try {
@@ -18,7 +55,7 @@ module.exports = (wss) => {
             break;
 
           case WS_EVENTS.WS_IN.MESSAGE:
-            await handleMessage(ws, wss, data);
+            await handleMessage(ws, data);
             break;
 
           case WS_EVENTS.WS_IN.VIEW:
@@ -37,10 +74,9 @@ module.exports = (wss) => {
     ws.on("close", () => {
       if (ws.username && ws.conversationId) {
         broadcastSystem(
-          wss,
           ws.conversationId,
           `${ws.username} left the conversation`,
-          ws,
+          ws.username,
         );
       }
     });
@@ -98,17 +134,21 @@ const handleJoinConversation = async (wss, ws, data) => {
   );
 
   broadcastSystem(
-    wss,
     data.conversationId,
     `${data.username} joined the conversation`,
-    ws,
+    data.username,
   );
 };
 
-const handleMessage = async (ws, wss, data) => {
+const handleMessage = async (ws, data) => {
   if (!ws.conversationId) return;
 
   await new Promise((res) => setTimeout(res, 3000));
+
+  if (!pub.isOpen) {
+    console.error("Redis pub not ready");
+    return;
+  }
 
   const saved = await messageController.saveMessage({
     conversationId: ws.conversationId,
@@ -131,26 +171,17 @@ const handleMessage = async (ws, wss, data) => {
     }),
   );
 
-  wss.clients.forEach((client) => {
-    if (
-      client.readyState === 1 &&
-      client.conversationId === ws.conversationId &&
-      client !== ws
-    ) {
-      client.send(
-        JSON.stringify({
-          type: WS_EVENTS.WS_OUT.NEW_MESSAGE,
-          data: {
-            clientMessageId: saved.clientMessageId,
-            senderName: saved.senderName,
-            content: saved.content,
-            createdAt: saved.createdAt,
-            clientCreatedAt: saved.clientCreatedAt,
-          },
-        }),
-      );
-    }
-  });
+  pub.publish(
+    "chat-message",
+    JSON.stringify({
+      conversationId: ws.conversationId,
+      clientCreatedAt: saved.clientCreatedAt,
+      clientMessageId: saved.clientMessageId,
+      senderName: saved.senderName,
+      content: saved.content,
+      createdAt: saved.createdAt,
+    }),
+  );
 };
 
 const handleViewHistory = async (ws, data) => {
@@ -167,19 +198,15 @@ const handleViewHistory = async (ws, data) => {
 };
 
 //*INFO: This function broadcast system message to others in conversation.
-const broadcastSystem = (wss, conversationId, message, exceptWs = null) => {
-  wss.clients.forEach((client) => {
-    if (
-      client.readyState === 1 &&
-      client.conversationId === conversationId &&
-      client !== exceptWs
-    ) {
-      client.send(
-        JSON.stringify({
-          type: WS_EVENTS.WS_OUT.SYSTEM,
-          message,
-        }),
-      );
-    }
-  });
+const broadcastSystem = async (conversationId, message, exceptUsername) => {
+  if (!pub.isOpen) return;
+
+  pub.publish(
+    "system-message",
+    JSON.stringify({
+      conversationId,
+      message,
+      exceptUsername,
+    }),
+  );
 };

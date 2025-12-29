@@ -1,4 +1,5 @@
 const Message = require("../models/Message");
+const { ERROR_TYPE } = require("../constants/index");
 
 exports.getHistory = async (payload) => {
   if (!payload) {
@@ -12,8 +13,8 @@ exports.getHistory = async (payload) => {
   }
 
   return Message.find({ conversationId })
-    .sort({ createdAt: 1 })
-    .select("content senderName createdAt -_id")
+    .sort({ clientCreatedAt: 1, createdAt: 1 })
+    .select("content senderName createdAt clientCreatedAt -_id clientMessageId")
     .lean();
 };
 
@@ -22,8 +23,15 @@ exports.saveMessage = async (payload) => {
     throw new Error("Payload is required");
   }
 
-  const { conversationId, content, senderName, userId } = payload;
-  // MVP: use username, future: use userId (uuid)
+  const {
+    conversationId,
+    content,
+    senderName,
+    userId,
+    clientMessageId,
+    clientCreatedAt,
+  } = payload;
+  //*HACK: in MVP: use username, future: use userId (uuid)
   const actor = userId ?? senderName;
 
   if (!conversationId) {
@@ -34,13 +42,35 @@ exports.saveMessage = async (payload) => {
     throw new Error("senderName is required");
   }
 
+  if (!clientMessageId) {
+    throw new Error("clientMessageId is required");
+  }
+
   if (!content || typeof content !== "string" || !content.trim()) {
     throw new Error("content must be a non-empty string");
   }
 
-  return Message.create({
-    conversationId,
-    content: content,
-    senderName: actor,
-  });
+  try {
+    const existing = await Message.findOne({
+      conversationId,
+      clientMessageId,
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return await Message.create({
+      conversationId,
+      clientMessageId,
+      content,
+      senderName: actor,
+      clientCreatedAt,
+    });
+  } catch (err) {
+    if (err.code === ERROR_TYPE.DUPLICATE_KEY) {
+      return await Message.findOne({ conversationId, clientMessageId });
+    }
+    console.error("saveMessage error:", err);
+  }
 };

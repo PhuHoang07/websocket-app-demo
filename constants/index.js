@@ -9,6 +9,7 @@ const WS_OUT = {
   CONVERSATION_CREATED: "CONVERSATION_CREATED",
   JOIN_SUCCESS: "JOIN_SUCCESS",
   JOIN_REFUSED: "JOIN_REFUSED",
+  MESSAGE_SENT: "MESSAGE_SENT",
   NEW_MESSAGE: "NEW_MESSAGE",
   HISTORY: "HISTORY",
   ERROR: "ERROR",
@@ -20,4 +21,15 @@ const CHAT_TYPE = {
   GROUP: "group",
 };
 
-module.exports = { WS_IN, WS_OUT, CHAT_TYPE };
+const ERROR_TYPE = {
+  DUPLICATE_KEY: 11000,
+};
+
+const MESSAGE_STATUS = {
+  SENDING: "sending",
+  SENT: "sent",
+  RETRYING: "retrying",
+  FAILED: "failed",
+};
+
+module.exports = { WS_IN, WS_OUT, CHAT_TYPE, ERROR_TYPE, MESSAGE_STATUS };

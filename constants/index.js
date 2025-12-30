@@ -3,6 +3,7 @@ const WS_IN = {
   JOIN: "JOIN",
   MESSAGE: "MESSAGE",
   VIEW: "VIEW",
+  PING: "PING",
 };
 
 const WS_OUT = {
@@ -32,4 +33,13 @@ const MESSAGE_STATUS = {
   FAILED: "failed",
 };
 
-module.exports = { WS_IN, WS_OUT, CHAT_TYPE, ERROR_TYPE, MESSAGE_STATUS };
+const PRESENCE_TTL = 10;
+
+module.exports = {
+  WS_IN,
+  WS_OUT,
+  CHAT_TYPE,
+  ERROR_TYPE,
+  MESSAGE_STATUS,
+  PRESENCE_TTL,
+};

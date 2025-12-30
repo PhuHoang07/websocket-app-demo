@@ -5,6 +5,7 @@ window.CONSTANTS = {
     JOIN: "JOIN",
     MESSAGE: "MESSAGE",
     VIEW: "VIEW",
+    PING: "PING",
   },
   WS_OUT: {
     CONVERSATION_CREATED: "CONVERSATION_CREATED",

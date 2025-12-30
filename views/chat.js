@@ -12,6 +12,8 @@ let username = null;
 let mode = null; // "JOIN" | "VIEW"
 let ws;
 let lastJoinPayload = null;
+let retryQueue = [];
+let isRetrying = false;
 
 connectWebSocket();
 
@@ -37,6 +39,12 @@ function connectWebSocket() {
   };
 }
 
+setInterval(() => {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.PING }));
+  }
+}, 5000);
+
 function formatTime(dateString) {
   const date = new Date(dateString);
 
@@ -54,16 +62,6 @@ function addSystemMessage(text) {
   const div = document.createElement("div");
   div.className = "system";
   div.textContent = text;
-  messagesDiv.appendChild(div);
-}
-
-function addChatMessage(sender, content, createdAt) {
-  const div = document.createElement("div");
-  div.className = "msg";
-
-  const time = createdAt ? formatTime(createdAt) : "";
-  div.textContent = `[${time}] ${sender}: ${content}`;
-
   messagesDiv.appendChild(div);
 }
 
@@ -94,16 +92,24 @@ function handleMessage(e) {
     case CONSTANTS.WS_OUT.HISTORY: {
       const pending = getPendingMessages();
 
-      const historyMessages = message.data.map((m) => ({
-        id: m.clientMessageId,
-        senderName: m.senderName,
-        content: m.content,
-        createdAt: m.createdAt,
-        status: CONSTANTS.MESSAGE_STATUS.SENT,
-      }));
+      const historyMessages = message.data.map((m) =>
+        normalizeServerMessage({
+          id: m.clientMessageId,
+          senderName: m.senderName,
+          content: m.content,
+          clientCreatedAt: m.clientCreatedAt,
+          acceptedAt: m.acceptedAt,
+          status: CONSTANTS.MESSAGE_STATUS.SENT,
+        }),
+      );
 
       messages.length = 0;
-      messages.push(...historyMessages, ...pending);
+      const historyIds = new Set(historyMessages.map((m) => m.id));
+
+      const safePending = pending.filter((p) => !historyIds.has(p.id));
+
+      messages.length = 0;
+      messages.push(...historyMessages, ...safePending);
 
       sortMessages();
       renderMessages();
@@ -122,16 +128,22 @@ function handleMessage(e) {
 
       if (index !== -1) {
         messages[index].status = CONSTANTS.MESSAGE_STATUS.SENT;
-        messages[index].createdAt = message.data.createdAt;
+        messages[index].acceptedAt = new Date(
+          message.data.acceptedAt,
+        ).getTime();
       } else {
-        messages.push({
-          id: message.data.clientMessageId,
-          senderName: message.data.senderName,
-          content: message.data.content,
-          createdAt: message.data.createdAt,
-          status: CONSTANTS.MESSAGE_STATUS.SENT,
-        });
+        messages.push(
+          normalizeServerMessage({
+            id: message.data.clientMessageId,
+            senderName: message.data.senderName,
+            content: message.data.content,
+            clientCreatedAt: message.data.clientCreatedAt,
+            acceptedAt: message.data.acceptedAt,
+            status: CONSTANTS.MESSAGE_STATUS.SENT,
+          }),
+        );
       }
+      sortMessages();
       renderMessages();
       break;
     }
@@ -146,37 +158,52 @@ function handleMessage(e) {
       if (index === -1) return;
 
       messages[index].status = CONSTANTS.MESSAGE_STATUS.SENT;
-      messages[index].createdAt = message.data.createdAt;
 
-      sortMessages();
+      if (retryQueue.length && retryQueue[0].id === message.tempId) {
+        retryQueue.shift();
+      }
+
       renderMessages();
+      processRetryQueue();
       break;
     }
   }
 }
 
 function retryPendingMessages() {
-  if (ws.readyState !== WebSocket.OPEN) return;
+  if (isRetrying || ws.readyState !== WebSocket.OPEN) return;
 
-  const pending = messages.filter(
-    (m) =>
-      m.status === CONSTANTS.MESSAGE_STATUS.SENDING ||
-      m.status === CONSTANTS.MESSAGE_STATUS.RETRYING,
-  );
+  retryQueue = messages
+    .filter(
+      (m) =>
+        !m.acceptedAt &&
+        (m.status === CONSTANTS.MESSAGE_STATUS.SENDING ||
+          m.status === CONSTANTS.MESSAGE_STATUS.RETRYING),
+    )
+    .sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
 
-  pending.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
+  processRetryQueue();
+}
 
-  pending.forEach((m) => {
-    if (m.retryCount >= 2) {
-      m.status = CONSTANTS.MESSAGE_STATUS.FAILED;
-      return;
-    }
-    m.status = CONSTANTS.MESSAGE_STATUS.RETRYING;
-    m.retryCount++;
-    sendMessageToServer(m);
-  });
+function processRetryQueue() {
+  if (retryQueue.length === 0) {
+    isRetrying = false;
+    return;
+  }
 
-  renderMessages();
+  isRetrying = true;
+  const msg = retryQueue[0];
+
+  if (msg.retryCount >= 2) {
+    msg.status = CONSTANTS.MESSAGE_STATUS.FAILED;
+    retryQueue.shift();
+    return processRetryQueue();
+  }
+
+  msg.retryCount++;
+  msg.status = CONSTANTS.MESSAGE_STATUS.RETRYING;
+
+  sendMessageToServer(msg);
 }
 
 function createConversation() {
@@ -241,7 +268,6 @@ function sendMessage() {
     id: tempId,
     senderName: username,
     content,
-    createdAt: null,
     clientCreatedAt: Date.now(),
     status: CONSTANTS.MESSAGE_STATUS.SENDING,
     retryCount: 0,
@@ -270,8 +296,8 @@ function sendMessageToServer(message) {
 
 function sortMessages() {
   messages.sort((a, b) => {
-    const timeA = a.clientCreatedAt || a.createdAt || 0;
-    const timeB = b.clientCreatedAt || b.createdAt || 0;
+    const timeA = a.acceptedAt ?? a.clientCreatedAt;
+    const timeB = b.acceptedAt ?? b.clientCreatedAt;
     return timeA - timeB;
   });
 }
@@ -286,8 +312,8 @@ function renderMessages() {
     const text = document.createElement("span");
     let prefix = "";
 
-    if (m.createdAt) {
-      prefix = `[${formatTime(m.createdAt)}] `;
+    if (m.acceptedAt) {
+      prefix = `[${formatTime(m.acceptedAt)}] `;
     }
 
     text.textContent = `${prefix}${m.senderName}: ${m.content}`;
@@ -320,6 +346,14 @@ function getPendingMessages() {
       m.status === CONSTANTS.MESSAGE_STATUS.SENDING ||
       m.status === CONSTANTS.MESSAGE_STATUS.RETRYING,
   );
+}
+
+function normalizeServerMessage(m) {
+  return {
+    ...m,
+    clientCreatedAt: new Date(m.clientCreatedAt).getTime(),
+    acceptedAt: m.acceptedAt ? new Date(m.acceptedAt).getTime() : null,
+  };
 }
 
 function autoScroll() {

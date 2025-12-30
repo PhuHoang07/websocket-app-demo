@@ -29,6 +29,11 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+
+    acceptedAt: {
+      type: Date,
+      required: true,
+    },
   },
   {
     timestamps: true,

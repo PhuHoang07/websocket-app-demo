@@ -2,6 +2,7 @@ const conversationController = require("../controllers/conversationController");
 const messageController = require("../controllers/messageController");
 const WS_EVENTS = require("../constants/index");
 const { pub, sub } = require("../redis/redis");
+const presence = require("../redis/presence");
 
 module.exports = (wss) => {
   sub.subscribe("chat-message", (raw) => {
@@ -61,6 +62,11 @@ module.exports = (wss) => {
           case WS_EVENTS.WS_IN.VIEW:
             await handleViewHistory(ws, data);
             break;
+
+          case WS_EVENTS.WS_IN.PING:
+            if (!ws.conversationId || !ws.username) return;
+            await presence.setOnline(ws.conversationId, ws.username);
+            break;
         }
       } catch (err) {
         ws.send(
@@ -71,8 +77,9 @@ module.exports = (wss) => {
         );
       }
     });
-    ws.on("close", () => {
+    ws.on("close", async () => {
       if (ws.username && ws.conversationId) {
+        await presence.removeOnline(ws.conversationId, ws.username);
         broadcastSystem(
           ws.conversationId,
           `${ws.username} left the conversation`,
@@ -115,6 +122,8 @@ const handleJoinConversation = async (wss, ws, data) => {
   ws.username = data.username;
   ws.conversationId = data.conversationId;
 
+  await presence.setOnline(ws.conversationId, ws.username);
+
   ws.send(
     JSON.stringify({
       type: WS_EVENTS.WS_OUT.JOIN_SUCCESS,
@@ -156,6 +165,7 @@ const handleMessage = async (ws, data) => {
     senderName: ws.username,
     clientMessageId: data.tempId,
     clientCreatedAt: data.clientCreatedAt,
+    acceptedAt: new Date(Date.now()),
   });
 
   ws.send(
@@ -165,8 +175,8 @@ const handleMessage = async (ws, data) => {
       data: {
         senderName: saved.senderName,
         content: saved.content,
-        createdAt: saved.createdAt,
         clientCreatedAt: saved.clientCreatedAt,
+        acceptedAt: saved.acceptedAt,
       },
     }),
   );
@@ -175,11 +185,11 @@ const handleMessage = async (ws, data) => {
     "chat-message",
     JSON.stringify({
       conversationId: ws.conversationId,
-      clientCreatedAt: saved.clientCreatedAt,
       clientMessageId: saved.clientMessageId,
       senderName: saved.senderName,
       content: saved.content,
-      createdAt: saved.createdAt,
+      clientCreatedAt: saved.clientCreatedAt,
+      acceptedAt: saved.acceptedAt,
     }),
   );
 };

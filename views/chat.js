@@ -5,6 +5,9 @@ const messagesDiv = document.getElementById("messages");
 const messageInput = document.getElementById("messageInput");
 const messages = [];
 const connectionStatusDiv = document.getElementById("connectionStatus");
+const typingUsers = new Set();
+const typingTimers = new Map();
+const typingDiv = document.getElementById("typing");
 
 let isReconnecting = false;
 let currentConversationId = null;
@@ -14,6 +17,10 @@ let ws;
 let lastJoinPayload = null;
 let retryMessageQueue = [];
 let isRetrying = false;
+let isTyping = false;
+let typingTimeout = null;
+let typingListenerAttached = false;
+let typingInterval = null;
 let pingInterval = null;
 connectWebSocket();
 
@@ -97,6 +104,8 @@ function handleMessage(e) {
       currentConversationId = messageData.conversationId;
       addSystemMessage("Joined conversation");
       setSendEnabled(true);
+
+      attachTypingListener();
       break;
 
     case CONSTANTS.WS_OUT.JOIN_REFUSED:
@@ -186,6 +195,24 @@ function handleMessage(e) {
 
       renderMessages();
       processRetryQueue();
+      break;
+    }
+
+    case CONSTANTS.WS_OUT.TYPING: {
+      const { username } = message.data;
+
+      typingUsers.add(username);
+
+      clearTimeout(typingTimers.get(username));
+      typingTimers.set(
+        username,
+        setTimeout(() => {
+          typingUsers.delete(username);
+          renderTyping();
+        }, 3000),
+      );
+
+      renderTyping();
       break;
     }
   }
@@ -284,6 +311,7 @@ function sendMessage() {
 
   const content = messageInput.value;
   if (!content) return;
+  stopTyping();
 
   const tempId = crypto.randomUUID();
 
@@ -388,6 +416,62 @@ function normalizeServerMessage(message) {
   };
 }
 
+function attachTypingListener() {
+  if (typingListenerAttached) return;
+  typingListenerAttached = true;
+
+  messageInput.addEventListener("input", onTypingInput);
+  messageInput.addEventListener("blur", () => {
+    stopTyping();
+  });
+}
+
+function onTypingInput() {
+  if (mode !== CONSTANTS.WS_IN.JOIN) return;
+  if (ws.readyState !== WebSocket.OPEN) return;
+
+  if (messageInput.value.trim() === "") {
+    stopTyping();
+    return;
+  }
+
+  if (!isTyping) {
+    isTyping = true;
+    ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.TYPING }));
+  }
+
+  if (!typingInterval) {
+    typingInterval = setInterval(() => {
+      if (isTyping && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.TYPING }));
+      }
+    }, 2000);
+  }
+
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(stopTyping, 1500);
+}
+
+function stopTyping() {
+  if (!isTyping) return;
+
+  isTyping = false;
+
+  clearInterval(typingInterval);
+  typingInterval = null;
+
+  clearTimeout(typingTimeout);
+  typingTimeout = null;
+}
+
+function renderTyping() {
+  typingDiv.innerHTML = "";
+
+  if (typingUsers.size === 0) return;
+
+  typingDiv.textContent = [...typingUsers].join(", ") + " is typing...";
+}
+
 function autoScroll() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
@@ -397,6 +481,22 @@ function resetState() {
   currentConversationId = null;
   messagesDiv.innerHTML = "";
   setSendEnabled(false);
+
+  isTyping = false;
+
+  if (typingTimeout) clearTimeout(typingTimeout);
+  typingTimeout = null;
+
+  if (typingInterval) clearInterval(typingInterval);
+  typingInterval = null;
+
+  typingUsers.clear();
+  typingTimers.forEach((t) => clearTimeout(t));
+  typingTimers.clear();
+
+  typingListenerAttached = false;
+
+  renderTyping();
 }
 
 function showReconnecting() {

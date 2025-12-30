@@ -41,6 +41,25 @@ module.exports = (wss) => {
     });
   });
 
+  sub.subscribe("typing", (raw) => {
+    const data = JSON.parse(raw);
+
+    wss.clients.forEach((client) => {
+      if (
+        client.readyState === 1 &&
+        client.conversationId === data.conversationId &&
+        client.username !== data.username
+      ) {
+        client.send(
+          JSON.stringify({
+            type: WS_EVENTS.WS_OUT.TYPING,
+            data,
+          }),
+        );
+      }
+    });
+  });
+
   wss.on("connection", (ws) => {
     ws.on("message", async (raw) => {
       try {
@@ -67,6 +86,19 @@ module.exports = (wss) => {
             if (!ws.conversationId || !ws.username) return;
             await presence.setOnline(ws.conversationId, ws.username);
             break;
+
+          case WS_EVENTS.WS_IN.TYPING: {
+            if (!ws.conversationId || !ws.username) return;
+
+            pub.publish(
+              "typing",
+              JSON.stringify({
+                conversationId: ws.conversationId,
+                username: ws.username,
+              }),
+            );
+            break;
+          }
         }
       } catch (err) {
         ws.send(

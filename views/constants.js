@@ -6,6 +6,7 @@ window.CONSTANTS = {
     MESSAGE: "MESSAGE",
     VIEW: "VIEW",
     PING: "PING",
+    TYPING: "TYPING",
   },
   WS_OUT: {
     CONVERSATION_CREATED: "CONVERSATION_CREATED",
@@ -16,6 +17,7 @@ window.CONSTANTS = {
     HISTORY: "HISTORY",
     ERROR: "ERROR",
     SYSTEM: "SYSTEM",
+    TYPING: "TYPING",
   },
   MESSAGE_STATUS: {
     SENDING: "sending",

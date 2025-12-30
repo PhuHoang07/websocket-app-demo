@@ -4,6 +4,7 @@ const WS_IN = {
   MESSAGE: "MESSAGE",
   VIEW: "VIEW",
   PING: "PING",
+  TYPING: "TYPING",
 };
 
 const WS_OUT = {
@@ -15,6 +16,7 @@ const WS_OUT = {
   HISTORY: "HISTORY",
   ERROR: "ERROR",
   SYSTEM: "SYSTEM",
+  TYPING: "TYPING",
 };
 
 const CHAT_TYPE = {

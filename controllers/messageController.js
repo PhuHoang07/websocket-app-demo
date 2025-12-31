@@ -13,8 +13,10 @@ exports.getHistory = async (payload) => {
   }
 
   return Message.find({ conversationId })
-    .sort({ clientCreatedAt: 1, createdAt: 1 })
-    .select("content senderName createdAt clientCreatedAt -_id clientMessageId")
+    .sort({ acceptedAt: 1 })
+    .select(
+      "content senderName acceptedAt clientCreatedAt -_id clientMessageId",
+    )
     .lean();
 };
 
@@ -30,6 +32,7 @@ exports.saveMessage = async (payload) => {
     userId,
     clientMessageId,
     clientCreatedAt,
+    acceptedAt,
   } = payload;
   //*HACK: in MVP: use username, future: use userId (uuid)
   const actor = userId ?? senderName;
@@ -66,6 +69,7 @@ exports.saveMessage = async (payload) => {
       content,
       senderName: actor,
       clientCreatedAt,
+      acceptedAt,
     });
   } catch (err) {
     if (err.code === ERROR_TYPE.DUPLICATE_KEY) {

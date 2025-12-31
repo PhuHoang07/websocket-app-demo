@@ -1,10 +1,11 @@
 const conversationController = require("../controllers/conversationController");
 const messageController = require("../controllers/messageController");
-const WS_EVENTS = require("../constants/index");
+const CONSTANTS = require("../constants/index");
 const { pub, sub } = require("../redis/redis");
+const presence = require("../redis/presence");
 
 module.exports = (wss) => {
-  sub.subscribe("chat-message", (raw) => {
+  sub.subscribe(CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE, (raw) => {
     const message = JSON.parse(raw);
 
     wss.clients.forEach((client) => {
@@ -14,7 +15,7 @@ module.exports = (wss) => {
       ) {
         client.send(
           JSON.stringify({
-            type: WS_EVENTS.WS_OUT.NEW_MESSAGE,
+            type: CONSTANTS.WS_OUT.NEW_MESSAGE,
             data: message,
           }),
         );
@@ -22,7 +23,7 @@ module.exports = (wss) => {
     });
   });
 
-  sub.subscribe("system-message", (raw) => {
+  sub.subscribe(CONSTANTS.REDIS_PUBSUB.SYSTEM_MESSAGE, (raw) => {
     const data = JSON.parse(raw);
     wss.clients.forEach((client) => {
       if (
@@ -32,7 +33,7 @@ module.exports = (wss) => {
       ) {
         client.send(
           JSON.stringify({
-            type: WS_EVENTS.WS_OUT.SYSTEM,
+            type: CONSTANTS.WS_OUT.SYSTEM,
             message: data.message,
           }),
         );
@@ -46,33 +47,39 @@ module.exports = (wss) => {
         const data = JSON.parse(raw.toString());
 
         switch (data.type) {
-          case WS_EVENTS.WS_IN.CREATE_CONVERSATION:
+          case CONSTANTS.WS_IN.CREATE_CONVERSATION:
             await handleCreateConversation(ws, data);
             break;
 
-          case WS_EVENTS.WS_IN.JOIN:
+          case CONSTANTS.WS_IN.JOIN:
             await handleJoinConversation(wss, ws, data);
             break;
 
-          case WS_EVENTS.WS_IN.MESSAGE:
+          case CONSTANTS.WS_IN.MESSAGE:
             await handleMessage(ws, data);
             break;
 
-          case WS_EVENTS.WS_IN.VIEW:
+          case CONSTANTS.WS_IN.VIEW:
             await handleViewHistory(ws, data);
+            break;
+
+          case CONSTANTS.WS_IN.PING:
+            if (!ws.conversationId || !ws.username) return;
+            await presence.setOnline(ws.conversationId, ws.username);
             break;
         }
       } catch (err) {
         ws.send(
           JSON.stringify({
-            type: WS_EVENTS.WS_OUT.ERROR,
+            type: CONSTANTS.WS_OUT.ERROR,
             message: err.message,
           }),
         );
       }
     });
-    ws.on("close", () => {
+    ws.on("close", async () => {
       if (ws.username && ws.conversationId) {
+        await presence.removeOnline(ws.conversationId, ws.username);
         broadcastSystem(
           ws.conversationId,
           `${ws.username} left the conversation`,
@@ -90,7 +97,7 @@ const handleCreateConversation = async (ws, data) => {
 
   ws.send(
     JSON.stringify({
-      type: WS_EVENTS.WS_OUT.CONVERSATION_CREATED,
+      type: CONSTANTS.WS_OUT.CONVERSATION_CREATED,
       conversationId: conversation._id,
     }),
   );
@@ -105,7 +112,7 @@ const handleJoinConversation = async (wss, ws, data) => {
   if (!result.ok) {
     ws.send(
       JSON.stringify({
-        type: WS_EVENTS.WS_OUT.JOIN_REFUSED,
+        type: CONSTANTS.WS_OUT.JOIN_REFUSED,
         reason: result.reason,
       }),
     );
@@ -115,9 +122,11 @@ const handleJoinConversation = async (wss, ws, data) => {
   ws.username = data.username;
   ws.conversationId = data.conversationId;
 
+  await presence.setOnline(ws.conversationId, ws.username);
+
   ws.send(
     JSON.stringify({
-      type: WS_EVENTS.WS_OUT.JOIN_SUCCESS,
+      type: CONSTANTS.WS_OUT.JOIN_SUCCESS,
       conversationId: data.conversationId,
     }),
   );
@@ -128,7 +137,7 @@ const handleJoinConversation = async (wss, ws, data) => {
 
   ws.send(
     JSON.stringify({
-      type: WS_EVENTS.WS_OUT.HISTORY,
+      type: CONSTANTS.WS_OUT.HISTORY,
       data: history,
     }),
   );
@@ -156,30 +165,31 @@ const handleMessage = async (ws, data) => {
     senderName: ws.username,
     clientMessageId: data.tempId,
     clientCreatedAt: data.clientCreatedAt,
+    acceptedAt: new Date(),
   });
 
   ws.send(
     JSON.stringify({
-      type: WS_EVENTS.WS_OUT.MESSAGE_SENT,
+      type: CONSTANTS.WS_OUT.MESSAGE_SENT,
       tempId: data.tempId,
       data: {
         senderName: saved.senderName,
         content: saved.content,
-        createdAt: saved.createdAt,
         clientCreatedAt: saved.clientCreatedAt,
+        acceptedAt: saved.acceptedAt,
       },
     }),
   );
 
   pub.publish(
-    "chat-message",
+    CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE,
     JSON.stringify({
       conversationId: ws.conversationId,
-      clientCreatedAt: saved.clientCreatedAt,
       clientMessageId: saved.clientMessageId,
       senderName: saved.senderName,
       content: saved.content,
-      createdAt: saved.createdAt,
+      clientCreatedAt: saved.clientCreatedAt,
+      acceptedAt: saved.acceptedAt,
     }),
   );
 };
@@ -191,7 +201,7 @@ const handleViewHistory = async (ws, data) => {
 
   ws.send(
     JSON.stringify({
-      type: WS_EVENTS.WS_OUT.HISTORY,
+      type: CONSTANTS.WS_OUT.HISTORY,
       data: history,
     }),
   );
@@ -202,7 +212,7 @@ const broadcastSystem = async (conversationId, message, exceptUsername) => {
   if (!pub.isOpen) return;
 
   pub.publish(
-    "system-message",
+    CONSTANTS.REDIS_PUBSUB.SYSTEM_MESSAGE,
     JSON.stringify({
       conversationId,
       message,

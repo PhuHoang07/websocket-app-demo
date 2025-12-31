@@ -3,6 +3,7 @@ const WS_IN = {
   JOIN: "JOIN",
   MESSAGE: "MESSAGE",
   VIEW: "VIEW",
+  PING: "PING",
 };
 
 const WS_OUT = {
@@ -32,4 +33,17 @@ const MESSAGE_STATUS = {
   FAILED: "failed",
 };
 
-module.exports = { WS_IN, WS_OUT, CHAT_TYPE, ERROR_TYPE, MESSAGE_STATUS };
+const REDIS_PUBSUB = {
+  CHAT_MESSAGE: "chat-message",
+  SYSTEM_MESSAGE: "system-message",
+  TYPING: "typing",
+};
+
+module.exports = {
+  WS_IN,
+  WS_OUT,
+  CHAT_TYPE,
+  ERROR_TYPE,
+  MESSAGE_STATUS,
+  REDIS_PUBSUB,
+};

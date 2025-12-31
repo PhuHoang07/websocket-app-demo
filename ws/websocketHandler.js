@@ -41,7 +41,7 @@ module.exports = (wss) => {
     });
   });
 
-  sub.subscribe("typing", (raw) => {
+  sub.subscribe(CONSTANTS.REDIS_PUBSUB.TYPING, (raw) => {
     const data = JSON.parse(raw);
 
     wss.clients.forEach((client) => {
@@ -52,7 +52,7 @@ module.exports = (wss) => {
       ) {
         client.send(
           JSON.stringify({
-            type: WS_EVENTS.WS_OUT.TYPING,
+            type: CONSTANTS.WS_OUT.TYPING,
             data,
           }),
         );
@@ -87,11 +87,11 @@ module.exports = (wss) => {
             await presence.setOnline(ws.conversationId, ws.username);
             break;
 
-          case WS_EVENTS.WS_IN.TYPING: {
+          case CONSTANTS.WS_IN.TYPING: {
             if (!ws.conversationId || !ws.username) return;
 
             pub.publish(
-              "typing",
+              CONSTANTS.REDIS_PUBSUB.TYPING,
               JSON.stringify({
                 conversationId: ws.conversationId,
                 username: ws.username,

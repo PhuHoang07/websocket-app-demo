@@ -199,7 +199,7 @@ function handleMessage(e) {
     }
 
     case CONSTANTS.WS_OUT.TYPING: {
-      const { username } = message.data;
+      const { username } = messageData.data;
 
       typingUsers.add(username);
 
@@ -445,11 +445,11 @@ function onTypingInput() {
       if (isTyping && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.TYPING }));
       }
-    }, 2000);
+    }, CONSTANTS.TIMES.TYPING_INTERVAL);
   }
 
   clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(stopTyping, 1500);
+  typingTimeout = setTimeout(stopTyping, CONSTANTS.TIMES.TYPING_TIMEOUT);
 }
 
 function stopTyping() {

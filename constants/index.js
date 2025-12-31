@@ -33,7 +33,11 @@ const MESSAGE_STATUS = {
   FAILED: "failed",
 };
 
-const PRESENCE_TTL = 10;
+const REDIS_PUBSUB = {
+  CHAT_MESSAGE: "chat-message",
+  SYSTEM_MESSAGE: "system-message",
+  TYPING: "typing",
+};
 
 module.exports = {
   WS_IN,
@@ -41,5 +45,5 @@ module.exports = {
   CHAT_TYPE,
   ERROR_TYPE,
   MESSAGE_STATUS,
-  PRESENCE_TTL,
+  REDIS_PUBSUB,
 };

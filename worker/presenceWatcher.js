@@ -1,6 +1,6 @@
 const { pub } = require("../redis/redis");
 const { PRESENCE_TTL } = require("../redis/presence");
-
+const CONSTANTS = require("../constants/index");
 const seen = new Set();
 
 async function watchPresence() {
@@ -24,7 +24,7 @@ async function watchPresence() {
         }
 
         pub.publish(
-          "system-message",
+          CONSTANTS.REDIS_PUBSUB.SYSTEM_MESSAGE,
           JSON.stringify({
             conversationId,
             message: `${username} is disconnected`,
@@ -36,7 +36,7 @@ async function watchPresence() {
 
     seen.clear();
     keys.forEach((k) => seen.add(k));
-  }, PRESENCE_TTL * 1000);
+  }, PRESENCE_TTL * 1000); //*INFO: PRESENCE_TTL is milisecond
 }
 
 module.exports = watchPresence;

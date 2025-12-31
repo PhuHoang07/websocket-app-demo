@@ -12,9 +12,9 @@ let username = null;
 let mode = null; // "JOIN" | "VIEW"
 let ws;
 let lastJoinPayload = null;
-let retryQueue = [];
+let retryMessageQueue = [];
 let isRetrying = false;
-
+let pingInterval = null;
 connectWebSocket();
 
 function connectWebSocket() {
@@ -26,6 +26,7 @@ function connectWebSocket() {
   ws.onopen = () => {
     hideReconnecting();
     addSystemMessage("Connected to " + wsUrl);
+    startPing();
 
     if (mode === CONSTANTS.WS_IN.JOIN && lastJoinPayload) {
       ws.send(JSON.stringify(lastJoinPayload));
@@ -35,15 +36,28 @@ function connectWebSocket() {
   ws.onmessage = handleMessage;
   ws.onclose = () => {
     showReconnecting();
-    setTimeout(connectWebSocket, 2000);
+    stopTyping();
+    stopPing();
+    setTimeout(connectWebSocket, CONSTANTS.TIMES.WEBSOCKET_TIMEOUT);
   };
 }
 
-setInterval(() => {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.PING }));
-  }
-}, 5000);
+function startPing() {
+  if (pingInterval) return;
+
+  pingInterval = setInterval(() => {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: CONSTANTS.WS_IN.PING }));
+    }
+  }, CONSTANTS.TIMES.PING_TIME);
+}
+
+function stopPing() {
+  if (!pingInterval) return;
+
+  clearInterval(pingInterval);
+  pingInterval = null;
+}
 
 function formatTime(dateString) {
   const date = new Date(dateString);
@@ -70,46 +84,48 @@ function setSendEnabled(enabled) {
 }
 
 function handleMessage(e) {
-  const message = JSON.parse(e.data);
+  const messageData = JSON.parse(e.data);
 
-  switch (message.type) {
+  switch (messageData.type) {
     case CONSTANTS.WS_OUT.CONVERSATION_CREATED:
-      currentConversationId = message.conversationId;
-      addSystemMessage(`Conversation created: ${message.conversationId}`);
+      currentConversationId = messageData.conversationId;
+      addSystemMessage(`Conversation created: ${messageData.conversationId}`);
       break;
 
     case CONSTANTS.WS_OUT.JOIN_SUCCESS:
       mode = CONSTANTS.WS_IN.JOIN;
-      currentConversationId = message.conversationId;
+      currentConversationId = messageData.conversationId;
       addSystemMessage("Joined conversation");
       setSendEnabled(true);
       break;
 
     case CONSTANTS.WS_OUT.JOIN_REFUSED:
-      addSystemMessage("Join refused: " + message.reason);
+      addSystemMessage("Join refused: " + messageData.reason);
       break;
 
     case CONSTANTS.WS_OUT.HISTORY: {
-      const pending = getPendingMessages();
+      const pendingMessages = getPendingMessages();
 
-      const historyMessages = message.data.map((m) =>
+      const historyMessages = messageData.data.map((messageItem) =>
         normalizeServerMessage({
-          id: m.clientMessageId,
-          senderName: m.senderName,
-          content: m.content,
-          clientCreatedAt: m.clientCreatedAt,
-          acceptedAt: m.acceptedAt,
+          id: messageItem.clientMessageId,
+          senderName: messageItem.senderName,
+          content: messageItem.content,
+          clientCreatedAt: messageItem.clientCreatedAt,
+          acceptedAt: messageItem.acceptedAt,
           status: CONSTANTS.MESSAGE_STATUS.SENT,
         }),
       );
 
       messages.length = 0;
-      const historyIds = new Set(historyMessages.map((m) => m.id));
+      const historyIds = new Set(historyMessages.map((message) => message.id));
 
-      const safePending = pending.filter((p) => !historyIds.has(p.id));
+      const safePendingMessage = pendingMessages.filter(
+        (pendingMessage) => !historyIds.has(pendingMessage.id),
+      );
 
       messages.length = 0;
-      messages.push(...historyMessages, ...safePending);
+      messages.push(...historyMessages, ...safePendingMessage);
 
       sortMessages();
       renderMessages();
@@ -123,22 +139,22 @@ function handleMessage(e) {
 
     case CONSTANTS.WS_OUT.NEW_MESSAGE: {
       const index = messages.findIndex(
-        (m) => m.id === message.data.clientMessageId,
+        (message) => message.id === messageData.data.clientMessageId,
       );
 
       if (index !== -1) {
         messages[index].status = CONSTANTS.MESSAGE_STATUS.SENT;
         messages[index].acceptedAt = new Date(
-          message.data.acceptedAt,
+          messageData.data.acceptedAt,
         ).getTime();
       } else {
         messages.push(
           normalizeServerMessage({
-            id: message.data.clientMessageId,
-            senderName: message.data.senderName,
-            content: message.data.content,
-            clientCreatedAt: message.data.clientCreatedAt,
-            acceptedAt: message.data.acceptedAt,
+            id: messageData.data.clientMessageId,
+            senderName: messageData.data.senderName,
+            content: messageData.data.content,
+            clientCreatedAt: messageData.data.clientCreatedAt,
+            acceptedAt: messageData.data.acceptedAt,
             status: CONSTANTS.MESSAGE_STATUS.SENT,
           }),
         );
@@ -149,18 +165,23 @@ function handleMessage(e) {
     }
 
     case CONSTANTS.WS_OUT.SYSTEM:
-      addSystemMessage(message.message);
+      addSystemMessage(messageData.message);
       autoScroll();
       break;
 
     case CONSTANTS.WS_OUT.MESSAGE_SENT: {
-      const index = messages.findIndex((m) => m.id === message.tempId);
+      const index = messages.findIndex(
+        (message) => message.id === messageData.tempId,
+      );
       if (index === -1) return;
 
       messages[index].status = CONSTANTS.MESSAGE_STATUS.SENT;
 
-      if (retryQueue.length && retryQueue[0].id === message.tempId) {
-        retryQueue.shift();
+      if (
+        retryMessageQueue.length &&
+        retryMessageQueue[0].id === messageData.tempId
+      ) {
+        retryMessageQueue.shift();
       }
 
       renderMessages();
@@ -171,14 +192,16 @@ function handleMessage(e) {
 }
 
 function retryPendingMessages() {
-  if (isRetrying || ws.readyState !== WebSocket.OPEN) return;
+  if (isRetrying || ws?.readyState !== WebSocket.OPEN) return;
 
-  retryQueue = messages
+  const RETRY_STATUS = [
+    CONSTANTS.MESSAGE_STATUS.SENDING,
+    CONSTANTS.MESSAGE_STATUS.RETRYING,
+  ];
+
+  retryMessageQueue = messages
     .filter(
-      (m) =>
-        !m.acceptedAt &&
-        (m.status === CONSTANTS.MESSAGE_STATUS.SENDING ||
-          m.status === CONSTANTS.MESSAGE_STATUS.RETRYING),
+      (message) => !message.acceptedAt && RETRY_STATUS.includes(message.status),
     )
     .sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
 
@@ -186,24 +209,24 @@ function retryPendingMessages() {
 }
 
 function processRetryQueue() {
-  if (retryQueue.length === 0) {
+  if (retryMessageQueue.length === 0) {
     isRetrying = false;
     return;
   }
 
   isRetrying = true;
-  const msg = retryQueue[0];
+  const message = retryMessageQueue[0];
 
-  if (msg.retryCount >= 2) {
-    msg.status = CONSTANTS.MESSAGE_STATUS.FAILED;
-    retryQueue.shift();
+  if (message.retryCount >= CONSTANTS.RETRY_MAX_TIMES) {
+    message.status = CONSTANTS.MESSAGE_STATUS.FAILED;
+    retryMessageQueue.shift();
     return processRetryQueue();
   }
 
-  msg.retryCount++;
-  msg.status = CONSTANTS.MESSAGE_STATUS.RETRYING;
+  message.retryCount++;
+  message.status = CONSTANTS.MESSAGE_STATUS.RETRYING;
 
-  sendMessageToServer(msg);
+  sendMessageToServer(message);
 }
 
 function createConversation() {
@@ -305,33 +328,37 @@ function sortMessages() {
 function renderMessages() {
   messagesDiv.innerHTML = "";
 
-  messages.forEach((m) => {
+  messages.forEach((message) => {
     const div = document.createElement("div");
     div.className = "msg";
 
     const text = document.createElement("span");
     let prefix = "";
 
-    if (m.acceptedAt) {
-      prefix = `[${formatTime(m.acceptedAt)}] `;
+    if (message.acceptedAt) {
+      prefix = `[${formatTime(message.acceptedAt)}] `;
     }
 
-    text.textContent = `${prefix}${m.senderName}: ${m.content}`;
+    text.textContent = `${prefix}${message.senderName}: ${message.content}`;
 
     div.appendChild(text);
 
-    if (m.status !== CONSTANTS.MESSAGE_STATUS.SENT) {
+    if (message.status !== CONSTANTS.MESSAGE_STATUS.SENT) {
       const status = document.createElement("span");
       status.className = "msg-status";
 
-      if (m.status === CONSTANTS.MESSAGE_STATUS.SENDING)
-        status.textContent = "sending...";
-      if (m.status === CONSTANTS.MESSAGE_STATUS.RETRYING)
-        status.textContent = `retrying (${m.retryCount})`;
-      if (m.status === CONSTANTS.MESSAGE_STATUS.FAILED)
-        status.textContent = "failed";
+      const statusMap = {
+        [CONSTANTS.MESSAGE_STATUS.SENDING]: "sending...",
+        [CONSTANTS.MESSAGE_STATUS.RETRYING]:
+          `retrying (${message.retryCount || 0})`,
+        [CONSTANTS.MESSAGE_STATUS.FAILED]: "failed",
+      };
 
-      div.appendChild(status);
+      const statusText = statusMap[message.status];
+      if (statusText) {
+        status.textContent = statusText;
+        div.appendChild(status);
+      }
     }
 
     messagesDiv.appendChild(div);
@@ -341,18 +368,23 @@ function renderMessages() {
 }
 
 function getPendingMessages() {
-  return messages.filter(
-    (m) =>
-      m.status === CONSTANTS.MESSAGE_STATUS.SENDING ||
-      m.status === CONSTANTS.MESSAGE_STATUS.RETRYING,
+  const PENDING_STATUSES = [
+    CONSTANTS.MESSAGE_STATUS.SENDING,
+    CONSTANTS.MESSAGE_STATUS.RETRYING,
+  ];
+
+  return messages.filter((message) =>
+    PENDING_STATUSES.includes(message.status),
   );
 }
 
-function normalizeServerMessage(m) {
+function normalizeServerMessage(message) {
   return {
-    ...m,
-    clientCreatedAt: new Date(m.clientCreatedAt).getTime(),
-    acceptedAt: m.acceptedAt ? new Date(m.acceptedAt).getTime() : null,
+    ...message,
+    clientCreatedAt: new Date(message.clientCreatedAt).getTime(),
+    acceptedAt: message.acceptedAt
+      ? new Date(message.acceptedAt).getTime()
+      : null,
   };
 }
 

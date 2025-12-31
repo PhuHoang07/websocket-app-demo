@@ -1,5 +1,6 @@
 const { pub } = require("./redis");
-const { PRESENCE_TTL } = require("../constants/index");
+
+const PRESENCE_TTL = 10;
 
 const presenceKey = (conversationId, username) =>
   `presence:${conversationId}:${username}`;

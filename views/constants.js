@@ -23,4 +23,12 @@ window.CONSTANTS = {
     RETRYING: "retrying",
     FAILED: "failed",
   },
+  TIMES: {
+    WEBSOCKET_TIMEOUT: 2000,
+    PING_TIME: 5000,
+    TYPING_INTERVAL: 2000,
+    TYPING_TIMEOUT: 1500,
+    DELETE_TYPING_TIMEOUT: 3000,
+  },
+  RETRY_MAX_TIMES: 2,
 };

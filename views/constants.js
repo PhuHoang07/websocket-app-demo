@@ -18,10 +18,12 @@ window.CONSTANTS = {
     ERROR: "ERROR",
     SYSTEM: "SYSTEM",
     TYPING: "TYPING",
+    MESSAGE_SEEN: "MESSAGE_SEEN",
   },
   MESSAGE_STATUS: {
     SENDING: "sending",
     SENT: "sent",
+    SEEN: "seen",
     RETRYING: "retrying",
     FAILED: "failed",
   },

@@ -209,7 +209,7 @@ function handleMessage(e) {
         setTimeout(() => {
           typingUsers.delete(username);
           renderTyping();
-        }, 3000),
+        }, CONSTANTS.TIMES.DELETE_TYPING),
       );
 
       renderTyping();

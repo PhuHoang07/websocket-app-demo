@@ -1,12 +1,27 @@
 const conversationController = require("../controllers/conversationController");
 const messageController = require("../controllers/messageController");
+const conversationReadController = require("../controllers/conversationReadController");
 const CONSTANTS = require("../constants/index");
 const { pub, sub } = require("../redis/redis");
 const presence = require("../redis/presence");
 
 module.exports = (wss) => {
-  sub.subscribe(CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE, (raw) => {
+  sub.subscribe(CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE, async (raw) => {
     const message = JSON.parse(raw);
+
+    if (message.type === CONSTANTS.WS_OUT.MESSAGE_SEEN) {
+      wss.clients.forEach((client) => {
+        if (
+          client.readyState === 1 &&
+          client.conversationId === message.conversationId
+        ) {
+          client.send(JSON.stringify(message));
+        }
+      });
+      return;
+    }
+
+    let receiverUsername = null;
 
     wss.clients.forEach((client) => {
       if (
@@ -19,8 +34,30 @@ module.exports = (wss) => {
             data: message,
           }),
         );
+
+        if (client.username && client.username !== message.senderName) {
+          receiverUsername = client.username;
+        }
       }
     });
+
+    if (receiverUsername) {
+      await conversationReadController.markSeenMessage({
+        conversationId: message.conversationId,
+        username: receiverUsername,
+        clientMessageId: message.clientMessageId,
+      });
+
+      pub.publish(
+        CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE,
+        JSON.stringify({
+          type: CONSTANTS.WS_OUT.MESSAGE_SEEN,
+          conversationId: message.conversationId,
+          clientMessageId: message.clientMessageId,
+          seenBy: receiverUsername,
+        }),
+      );
+    }
   });
 
   sub.subscribe(CONSTANTS.REDIS_PUBSUB.SYSTEM_MESSAGE, (raw) => {
@@ -167,12 +204,29 @@ const handleJoinConversation = async (ws, data) => {
     conversationId: data.conversationId,
   });
 
+  const lastSeen = await conversationReadController.markSeenLatest({
+    conversationId: ws.conversationId,
+    username: ws.username,
+  });
+
   ws.send(
     JSON.stringify({
       type: CONSTANTS.WS_OUT.HISTORY,
       data: history,
+      lastSeenMessageId: lastSeen?.lastSeenMessageId ?? null,
     }),
   );
+  if (lastSeen && lastSeen.hasNewSeen) {
+    pub.publish(
+      CONSTANTS.REDIS_PUBSUB.CHAT_MESSAGE,
+      JSON.stringify({
+        type: CONSTANTS.WS_OUT.MESSAGE_SEEN,
+        conversationId: ws.conversationId,
+        clientMessageId: lastSeen.lastSeenMessageId,
+        seenBy: ws.username,
+      }),
+    );
+  }
 
   broadcastSystem(
     data.conversationId,

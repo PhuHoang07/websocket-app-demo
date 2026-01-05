@@ -113,36 +113,33 @@ function handleMessage(e) {
       break;
 
     case CONSTANTS.WS_OUT.HISTORY: {
-      const pendingMessages = getPendingMessages();
+      const { data, lastSeenMessageId } = messageData;
 
-      const historyMessages = messageData.data.map((messageItem) =>
-        normalizeServerMessage({
+      const historyMessages = data.map((messageItem) => {
+        let status = CONSTANTS.MESSAGE_STATUS.SENT;
+
+        if (
+          messageItem.senderName === username &&
+          messageItem.clientMessageId === lastSeenMessageId
+        ) {
+          status = CONSTANTS.MESSAGE_STATUS.SEEN;
+        }
+
+        return normalizeServerMessage({
           id: messageItem.clientMessageId,
           senderName: messageItem.senderName,
           content: messageItem.content,
           clientCreatedAt: messageItem.clientCreatedAt,
           acceptedAt: messageItem.acceptedAt,
-          status: CONSTANTS.MESSAGE_STATUS.SENT,
-        }),
-      );
+          status,
+        });
+      });
 
       messages.length = 0;
-      const historyIds = new Set(historyMessages.map((message) => message.id));
-
-      const safePendingMessage = pendingMessages.filter(
-        (pendingMessage) => !historyIds.has(pendingMessage.id),
-      );
-
-      messages.length = 0;
-      messages.push(...historyMessages, ...safePendingMessage);
+      messages.push(...historyMessages);
 
       sortMessages();
       renderMessages();
-      retryPendingMessages();
-
-      if (mode === CONSTANTS.WS_IN.VIEW) {
-        addSystemMessage("Viewing conversation (read-only)");
-      }
       break;
     }
 
@@ -213,6 +210,25 @@ function handleMessage(e) {
       );
 
       renderTyping();
+      break;
+    }
+
+    case CONSTANTS.WS_OUT.MESSAGE_SEEN: {
+      const { clientMessageId, seenBy } = messageData;
+
+      if (seenBy === username) break;
+
+      const lastOwnMessage = [...messages]
+        .reverse()
+        .find(
+          (message) => message.senderName === username && message.acceptedAt,
+        );
+
+      if (lastOwnMessage && lastOwnMessage.id === clientMessageId) {
+        lastOwnMessage.status = CONSTANTS.MESSAGE_STATUS.SEEN;
+        renderMessages();
+      }
+
       break;
     }
   }
@@ -356,6 +372,8 @@ function sortMessages() {
 function renderMessages() {
   messagesDiv.innerHTML = "";
 
+  const lastMessage = messages.at(-1);
+
   messages.forEach((message) => {
     const div = document.createElement("div");
     div.className = "msg";
@@ -368,25 +386,26 @@ function renderMessages() {
     }
 
     text.textContent = `${prefix}${message.senderName}: ${message.content}`;
-
     div.appendChild(text);
 
-    if (message.status !== CONSTANTS.MESSAGE_STATUS.SENT) {
+    if (
+      lastMessage &&
+      message === lastMessage &&
+      message.senderName === username
+    ) {
       const status = document.createElement("span");
       status.className = "msg-status";
 
       const statusMap = {
-        [CONSTANTS.MESSAGE_STATUS.SENDING]: "sending...",
-        [CONSTANTS.MESSAGE_STATUS.RETRYING]:
-          `retrying (${message.retryCount || 0})`,
-        [CONSTANTS.MESSAGE_STATUS.FAILED]: "failed",
+        sent: "sent",
+        seen: "seen",
+        sending: "sending...",
+        retrying: `retrying (${message.retryCount || 0})`,
+        failed: "failed",
       };
 
-      const statusText = statusMap[message.status];
-      if (statusText) {
-        status.textContent = statusText;
-        div.appendChild(status);
-      }
+      status.textContent = statusMap[message.status];
+      div.appendChild(status);
     }
 
     messagesDiv.appendChild(div);

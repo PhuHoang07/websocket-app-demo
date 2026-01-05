@@ -10,7 +10,7 @@ module.exports = (wss) => {
 
     wss.clients.forEach((client) => {
       if (
-        client.readyState === 1 &&
+        client.readyState === CONSTANTS.READYSTATE.OPEN &&
         client.conversationId === message.conversationId
       ) {
         client.send(
@@ -27,7 +27,7 @@ module.exports = (wss) => {
     const data = JSON.parse(raw);
     wss.clients.forEach((client) => {
       if (
-        client.readyState === 1 &&
+        client.readyState === CONSTANTS.READYSTATE.OPEN &&
         client.conversationId === data.conversationId &&
         client.username !== data.exceptUsername
       ) {
@@ -35,6 +35,25 @@ module.exports = (wss) => {
           JSON.stringify({
             type: CONSTANTS.WS_OUT.SYSTEM,
             message: data.message,
+          }),
+        );
+      }
+    });
+  });
+
+  sub.subscribe(CONSTANTS.REDIS_PUBSUB.TYPING, (raw) => {
+    const data = JSON.parse(raw);
+
+    wss.clients.forEach((client) => {
+      if (
+        client.readyState === CONSTANTS.READYSTATE.OPEN &&
+        client.conversationId === data.conversationId &&
+        client.username !== data.username
+      ) {
+        client.send(
+          JSON.stringify({
+            type: CONSTANTS.WS_OUT.TYPING,
+            data,
           }),
         );
       }
@@ -52,7 +71,7 @@ module.exports = (wss) => {
             break;
 
           case CONSTANTS.WS_IN.JOIN:
-            await handleJoinConversation(wss, ws, data);
+            await handleJoinConversation(ws, data);
             break;
 
           case CONSTANTS.WS_IN.MESSAGE:
@@ -67,6 +86,19 @@ module.exports = (wss) => {
             if (!ws.conversationId || !ws.username) return;
             await presence.setOnline(ws.conversationId, ws.username);
             break;
+
+          case CONSTANTS.WS_IN.TYPING: {
+            if (!ws.conversationId || !ws.username) return;
+
+            pub.publish(
+              CONSTANTS.REDIS_PUBSUB.TYPING,
+              JSON.stringify({
+                conversationId: ws.conversationId,
+                username: ws.username,
+              }),
+            );
+            break;
+          }
         }
       } catch (err) {
         ws.send(
@@ -103,7 +135,7 @@ const handleCreateConversation = async (ws, data) => {
   );
 };
 
-const handleJoinConversation = async (wss, ws, data) => {
+const handleJoinConversation = async (ws, data) => {
   const result = await conversationController.joinConversation({
     conversationId: data.conversationId,
     username: data.username,

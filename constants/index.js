@@ -4,6 +4,7 @@ const WS_IN = {
   MESSAGE: "MESSAGE",
   VIEW: "VIEW",
   PING: "PING",
+  TYPING: "TYPING",
 };
 
 const WS_OUT = {
@@ -15,6 +16,7 @@ const WS_OUT = {
   HISTORY: "HISTORY",
   ERROR: "ERROR",
   SYSTEM: "SYSTEM",
+  TYPING: "TYPING",
 };
 
 const CHAT_TYPE = {
@@ -39,6 +41,13 @@ const REDIS_PUBSUB = {
   TYPING: "typing",
 };
 
+const READYSTATE = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3,
+};
+
 module.exports = {
   WS_IN,
   WS_OUT,
@@ -46,4 +55,5 @@ module.exports = {
   ERROR_TYPE,
   MESSAGE_STATUS,
   REDIS_PUBSUB,
+  READYSTATE,
 };

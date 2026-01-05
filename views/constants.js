@@ -1,0 +1,38 @@
+// eslint-disable-next-line no-undef
+window.CONSTANTS = {
+  WS_IN: {
+    CREATE_CONVERSATION: "CREATE_CONVERSATION",
+    JOIN: "JOIN",
+    MESSAGE: "MESSAGE",
+    VIEW: "VIEW",
+    PING: "PING",
+    TYPING: "TYPING",
+  },
+  WS_OUT: {
+    CONVERSATION_CREATED: "CONVERSATION_CREATED",
+    JOIN_SUCCESS: "JOIN_SUCCESS",
+    JOIN_REFUSED: "JOIN_REFUSED",
+    MESSAGE_SENT: "MESSAGE_SENT",
+    NEW_MESSAGE: "NEW_MESSAGE",
+    HISTORY: "HISTORY",
+    ERROR: "ERROR",
+    SYSTEM: "SYSTEM",
+    TYPING: "TYPING",
+    MESSAGE_SEEN: "MESSAGE_SEEN",
+  },
+  MESSAGE_STATUS: {
+    SENDING: "sending",
+    SENT: "sent",
+    SEEN: "seen",
+    RETRYING: "retrying",
+    FAILED: "failed",
+  },
+  TIMES: {
+    WEBSOCKET_TIMEOUT: 2000,
+    PING_TIME: 5000,
+    TYPING_INTERVAL: 2000,
+    TYPING_TIMEOUT: 1500,
+    DELETE_TYPING: 3000,
+  },
+  RETRY_MAX_TIMES: 2,
+};

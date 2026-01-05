@@ -1,0 +1,61 @@
+const WS_IN = {
+  CREATE_CONVERSATION: "CREATE_CONVERSATION",
+  JOIN: "JOIN",
+  MESSAGE: "MESSAGE",
+  VIEW: "VIEW",
+  PING: "PING",
+  TYPING: "TYPING",
+  SEEN: "SEEN",
+};
+
+const WS_OUT = {
+  CONVERSATION_CREATED: "CONVERSATION_CREATED",
+  JOIN_SUCCESS: "JOIN_SUCCESS",
+  JOIN_REFUSED: "JOIN_REFUSED",
+  MESSAGE_SENT: "MESSAGE_SENT",
+  NEW_MESSAGE: "NEW_MESSAGE",
+  HISTORY: "HISTORY",
+  ERROR: "ERROR",
+  SYSTEM: "SYSTEM",
+  TYPING: "TYPING",
+  MESSAGE_SEEN: "MESSAGE_SEEN",
+};
+
+const CHAT_TYPE = {
+  PRIVATE: "private",
+  GROUP: "group",
+};
+
+const ERROR_TYPE = {
+  DUPLICATE_KEY: 11000,
+};
+
+const MESSAGE_STATUS = {
+  SENDING: "sending",
+  SENT: "sent",
+  RETRYING: "retrying",
+  FAILED: "failed",
+};
+
+const REDIS_PUBSUB = {
+  CHAT_MESSAGE: "chat-message",
+  SYSTEM_MESSAGE: "system-message",
+  TYPING: "typing",
+};
+
+const READYSTATE = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3,
+};
+
+module.exports = {
+  WS_IN,
+  WS_OUT,
+  CHAT_TYPE,
+  ERROR_TYPE,
+  MESSAGE_STATUS,
+  REDIS_PUBSUB,
+  READYSTATE,
+};

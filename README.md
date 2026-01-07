@@ -64,6 +64,8 @@ Open  `http://localhost:3000/views/index.html` (replace `3000` with your port)
   - `seen`: receiver joins or reads message
 - Typing indicator appears when the other user is typing
 
+---
+
 ## Tech Stack
 
 ### Backend
@@ -75,6 +77,8 @@ Open  `http://localhost:3000/views/index.html` (replace `3000` with your port)
 - HTML
 - CSS
 - JavaScript
+
+---
 
 ## References
 - WebSocket MDN: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket

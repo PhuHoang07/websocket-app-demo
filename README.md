@@ -43,15 +43,7 @@ PORT=YOUR_PORT
 MONGO_URI=YOUR_DB_URI
 ```
 
-## Run Redis with Docker
-
-This project uses Redis for:
-- Pub/Sub message delivery
-- Online presence
-- Typing indicator
-- Message `seen` status
-
-## Run Redis container
+### Run Redis with Docker
 ```bash
 docker run -d --name redis -p 6379:6379 redis:<version>
 ```

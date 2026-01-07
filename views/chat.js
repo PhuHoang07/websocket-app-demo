@@ -106,6 +106,7 @@ function handleMessage(e) {
       setSendEnabled(true);
 
       attachTypingListener();
+      retryPendingMessages();
       break;
 
     case CONSTANTS.WS_OUT.JOIN_REFUSED:
@@ -114,6 +115,8 @@ function handleMessage(e) {
 
     case CONSTANTS.WS_OUT.HISTORY: {
       const { data, lastSeenMessageId } = messageData;
+
+      const pendingMessages = getPendingMessages();
 
       const historyMessages = data.map((messageItem) => {
         let status = CONSTANTS.MESSAGE_STATUS.SENT;
@@ -135,11 +138,16 @@ function handleMessage(e) {
         });
       });
 
+      const historyIds = new Set(historyMessages.map((m) => m.id));
+
+      const safePending = pendingMessages.filter((m) => !historyIds.has(m.id));
+
       messages.length = 0;
-      messages.push(...historyMessages);
+      messages.push(...historyMessages, ...safePending);
 
       sortMessages();
       renderMessages();
+      retryPendingMessages();
       break;
     }
 

@@ -15,6 +15,7 @@ Features:
 - **Node.js** >= 18
 - **npm** >= 9
 - **MongoDB** (Local or MongoDB Atlas)
+- **Redis** (Docker)
 - Modern browser (Chrome, Edge, Firefox)
 
 ---
@@ -32,11 +33,27 @@ cd websocket-app-demo
 npm intall
 ```
 
+### Setup new MongoDB Cloud
+https://www.mongodb.com/products/platform/cloud
+
 ### Environment variables
 Create a `.env` file inside the folder
 ```env
-PORT=YOUR PORT
-MONGO_URI=YOUR DB URI
+PORT=YOUR_PORT
+MONGO_URI=YOUR_DB_URI
+```
+
+## Run Redis with Docker
+
+This project uses Redis for:
+- Pub/Sub message delivery
+- Online presence
+- Typing indicator
+- Message `seen` status
+
+## Run Redis container
+```bash
+docker run -d --name redis -p 6379:6379 redis:<version>
 ```
 
 ### Run demo
@@ -71,6 +88,7 @@ Open  `http://localhost:3000/views/index.html` (replace `3000` with your port)
 - WebSocket MDN: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
 - Mongoose: https://mongoosejs.com/
 - Redis: https://github.com/redis/node-redis?tab=readme-ov-file
+- Run Redis on Docker: https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/
 
 
 

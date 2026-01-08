@@ -3,6 +3,8 @@
 ## Demo
 Simple real-time chat application using **WebSocket**.
 
+[Watch the video](https://www.youtube.com/watch?v=VKF3nQkkp1s)
+
 Features:
 - Real-time messaging
 - Typing indicator
@@ -12,8 +14,9 @@ Features:
 ---
 
 ## Requirements
-- **Node.js** >= 18
-- **npm** >= 9
+- [Node.js](https://nodejs.org/en/download) >= 18
+- [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) >= 9
+- [Docker](https://docs.docker.com/desktop/setup/install/windows-install/)
 - **MongoDB** (Local or MongoDB Atlas)
 - **Redis** (Docker)
 - Modern browser (Chrome, Edge, Firefox)
@@ -45,19 +48,21 @@ MONGO_URI=YOUR_DB_URI
 
 ### Run Redis with Docker
 ```bash
-docker run -d --name redis -p 6379:6379 redis:<version>
+docker pull redis/redis-stack-server:latest
+docker run -d --name redis-stack-server -p 6379:6379 redis/redis-stack-server:latest
 ```
-
+You can cheeck if the Redis container is running by using Docker desktop
 ### Run demo
 ```bash
 npm start
 ```
-Open  `http://localhost:3000/views/index.html` (replace `3000` with your port)
+Open  `http://localhost:3000/views/index.html` with your browser (replace `3000` with your port)
 
 ---
 
 ## Usage
 - Open 2 browser tabs to simulate 2 users
+  (If you want to run 2 server with different port, use `$env:PORT=PORT_YOU_WANT; npm start`)
 - Send messages in real-time
 - Message status:
   - `sent`: receiver is offline
